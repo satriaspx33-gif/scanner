@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" id="themeColor" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Scan Surat Jalan</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#f1f5f9;--bg2:#ffffff;--bg3:#f8fafc;--text:#0f172a;--text2:#475569;--text3:#94a3b8;
+  --accent:#3b82f6;--accent2:#2563eb;--accent-glow:rgba(59,130,246,.15);
+  --success:#22c55e;--success-bg:rgba(34,197,94,.1);
+  --warn:#f59e0b;--warn-bg:rgba(245,158,11,.1);
+  --danger:#ef4444;--danger-bg:rgba(239,68,68,.1);
+  --border:#e2e8f0;--shadow:0 1px 3px rgba(0,0,0,.08);--shadow2:0 4px 12px rgba(0,0,0,.08);
+  --radius:16px;--radius-sm:12px;
+}
+[data-theme="dark"]{
+  --bg:#0b1120;--bg2:#162033;--bg3:#1a2744;--text:#f1f5f9;--text2:#94a3b8;--text3:#64748b;
+  --border:#1e3050;--shadow:0 1px 3px rgba(0,0,0,.3);--shadow2:0 4px 12px rgba(0,0,0,.4);
+  --accent-glow:rgba(59,130,246,.2);--success-bg:rgba(34,197,94,.12);
+  --warn-bg:rgba(245,158,11,.12);--danger-bg:rgba(239,68,68,.12);
+}
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:-apple-system,'Segoe UI',Roboto,'Noto Sans',sans-serif;
+  background:var(--bg);color:var(--text);
+  transition:background .35s,color .35s;
+  overscroll-behavior:none;
+}
+#app{display:flex;flex-direction:column;height:100%;max-width:480px;margin:0 auto}
+
+/* HEADER */
+header{
+  padding:12px 16px;display:flex;align-items:center;gap:10px;
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  position:relative;z-index:10;transition:background .35s,border-color .35s;
+}
+.logo{
+  width:38px;height:38px;border-radius:10px;
+  background:linear-gradient(135deg,#3b82f6,#8b5cf6);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.logo svg{width:22px;height:22px;fill:#fff}
+.header-info{flex:1;min-width:0}
+.app-name{font-size:16px;font-weight:700;letter-spacing:-.3px}
+.conn-status{font-size:11px;display:flex;align-items:center;gap:4px;margin-top:1px}
+.conn-dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+.conn-dot.on{background:var(--success)}
+.conn-dot.off{background:var(--text3)}
+.header-actions{display:flex;gap:4px}
+.icon-btn{
+  width:38px;height:38px;border-radius:10px;border:1px solid var(--border);
+  background:var(--bg3);color:var(--text2);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:all .2s;
+}
+.icon-btn:active{transform:scale(.92);opacity:.8}
+.icon-btn svg{width:18px;height:18px}
+
+/* MAIN */
+main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 80px}
+
+/* SCANNER */
+.scanner-card{
+  background:var(--bg2);border-radius:var(--radius);overflow:hidden;
+  border:1px solid var(--border);box-shadow:var(--shadow);
+  margin-bottom:12px;transition:all .35s;
+}
+.scanner-area{
+  position:relative;aspect-ratio:4/3;background:#000;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
+}
+.scanner-area video{width:100%;height:100%;object-fit:cover}
+.scanner-placeholder{
+  text-align:center;color:#64748b;
+}
+.scanner-placeholder svg{width:48px;height:48px;fill:#475569;margin-bottom:8px;opacity:.5}
+.scanner-placeholder p{font-size:13px;line-height:1.5}
+.scanner-placeholder .sub{font-size:11px;color:#64748b;margin-top:2px}
+
+/* Scan overlay */
+.scan-overlay{
+  position:absolute;inset:0;pointer-events:none;
+  display:flex;align-items:center;justify-content:center;
+}
+.scan-frame{
+  width:75%;aspect-ratio:1.8/1;position:relative;
+}
+.scan-corner{
+  position:absolute;width:24px;height:24px;
+  border-color:var(--accent);border-style:solid;
+}
+.scan-corner.tl{top:0;left:0;border-width:3px 0 0 3px;border-radius:4px 0 0 0}
+.scan-corner.tr{top:0;right:0;border-width:3px 3px 0 0;border-radius:0 4px 0 0}
+.scan-corner.bl{bottom:0;left:0;border-width:0 0 3px 3px;border-radius:0 0 0 4px}
+.scan-corner.br{bottom:0;right:0;border-width:0 3px 3px 0;border-radius:0 0 4px 0}
+.scan-line{
+  position:absolute;left:5%;right:5%;height:2px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  animation:scanLine 2s ease-in-out infinite;
+  box-shadow:0 0 8px var(--accent);
+}
+@keyframes scanLine{0%,100%{top:10%}50%{top:90%}}
+
+/* Buttons */
+.scan-btns{display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:12px}
+.btn{
+  padding:12px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;
+  border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;
+  transition:all .2s;user-select:none;
+}
+.btn:active{transform:scale(.96)}
+.btn svg{width:18px;height:18px}
+.btn-primary{
+  background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;
+  box-shadow:0 2px 8px rgba(59,130,246,.3);
+}
+.btn-primary:active{box-shadow:0 1px 4px rgba(59,130,246,.2)}
+.btn-primary.active{
+  background:linear-gradient(135deg,#ef4444,#f97316);
+  box-shadow:0 2px 8px rgba(239,68,68,.3);
+}
+.btn-secondary{
+  background:var(--bg2);color:var(--text);border:1px solid var(--border);
+  box-shadow:var(--shadow);
+}
+
+/* HISTORY */
+.history-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:10px;padding:0 4px;
+}
+.history-title{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
+.history-count{
+  background:var(--accent);color:#fff;font-size:11px;font-weight:700;
+  padding:2px 8px;border-radius:20px;min-width:24px;text-align:center;
+}
+.history-actions{display:flex;gap:6px}
+.history-actions .btn-sm{
+  padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;
+  border:1px solid var(--border);background:var(--bg2);color:var(--text2);
+  cursor:pointer;display:flex;align-items:center;gap:4px;transition:all .2s;
+}
+.history-actions .btn-sm:active{transform:scale(.95)}
+.history-actions .btn-sm svg{width:14px;height:14px}
+.btn-sm.danger{color:var(--danger);border-color:var(--danger)}
+.btn-sm.retry-all{color:var(--accent);border-color:var(--accent)}
+
+.scan-list{display:flex;flex-direction:column;gap:8px}
+.scan-item{
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:12px 14px;display:flex;align-items:center;gap:12px;
+  box-shadow:var(--shadow);transition:all .35s;
+  animation:fadeInUp .3s ease;
+}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.scan-icon-wrap{
+  width:40px;height:40px;border-radius:10px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+}
+.scan-icon-wrap.synced{background:var(--success-bg)}
+.scan-icon-wrap.pending{background:var(--warn-bg)}
+.scan-icon-wrap svg{width:18px;height:18px}
+.scan-details{flex:1;min-width:0}
+.scan-barcode{font-size:14px;font-weight:700;font-family:'Courier New',monospace;letter-spacing:.5px;word-break:break-all}
+.scan-meta{display:flex;align-items:center;gap:6px;margin-top:3px;font-size:11px;color:var(--text3);flex-wrap:wrap}
+.scan-mode{
+  padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;
+  background:rgba(139,92,246,.15);color:#a78bfa;text-transform:uppercase;
+}
+.scan-status{
+  display:flex;align-items:center;gap:3px;font-size:11px;font-weight:600;
+}
+.scan-status.synced{color:var(--success)}
+.scan-status.pending{color:var(--warn)}
+.scan-item-actions{display:flex;flex-direction:column;gap:4px;flex-shrink:0}
+.item-btn{
+  width:32px;height:32px;border-radius:8px;border:none;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:all .2s;
+}
+.item-btn:active{transform:scale(.85)}
+.item-btn.retry{background:var(--accent-glow);color:var(--accent)}
+.item-btn.delete{background:var(--danger-bg);color:var(--danger)}
+.item-btn svg{width:14px;height:14px}
+
+.empty-state{
+  text-align:center;padding:40px 20px;color:var(--text3);
+}
+.empty-state svg{width:48px;height:48px;fill:var(--text3);opacity:.4;margin-bottom:12px}
+.empty-state p{font-size:13px}
+
+/* SETTINGS MODAL */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;
+  opacity:0;visibility:hidden;transition:all .3s;
+  display:flex;align-items:flex-end;justify-content:center;
+}
+.modal-overlay.show{opacity:1;visibility:visible}
+.modal{
+  background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-width:480px;
+  padding:20px;transform:translateY(100%);transition:transform .35s cubic-bezier(.32,.72,0,1);
+}
+.modal-overlay.show .modal{transform:translateY(0)}
+.modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px}
+.modal-title{font-size:17px;font-weight:700;margin-bottom:16px}
+.form-group{margin-bottom:14px}
+.form-label{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;display:block}
+.form-input{
+  width:100%;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);
+  background:var(--bg3);color:var(--text);font-size:14px;outline:none;
+  transition:border-color .2s;
+}
+.form-input:focus{border-color:var(--accent)}
+.form-hint{font-size:11px;color:var(--text3);margin-top:4px}
+.form-hint.valid{color:var(--success)}
+.form-hint.invalid{color:var(--danger)}
+.modal-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}
+
+/* TOAST */
+.toast-container{
+  position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:200;
+  width:calc(100% - 32px);max-width:400px;pointer-events:none;
+}
+.toast{
+  padding:12px 16px;border-radius:12px;margin-bottom:8px;
+  font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;
+  animation:toastIn .3s ease;pointer-events:auto;
+  box-shadow:0 4px 16px rgba(0,0,0,.2);
+}
+.toast.success{background:#16a34a;color:#fff}
+.toast.error{background:#dc2626;color:#fff}
+.toast.info{background:#2563eb;color:#fff}
+.toast svg{width:16px;height:16px;flex-shrink:0}
+@keyframes toastIn{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes toastOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-12px)}}
+
+/* Connection badge in header */
+.sheet-badge{
+  position:absolute;top:8px;right:16px;padding:4px 10px;border-radius:8px;
+  font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px;
+  cursor:pointer;transition:all .2s;z-index:5;
+}
+.sheet-badge.on{background:var(--success-bg);color:var(--success)}
+.sheet-badge.off{background:var(--bg3);color:var(--text3);border:1px solid var(--border)}
+.sheet-badge svg{width:12px;height:12px}
+
+/* Hidden */
+.hidden{display:none!important}
+input[type="file"]{display:none}
+
+/* Scrollbar */
+main::-webkit-scrollbar{width:4px}
+main::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+/* Loading spinner */
+.spinner{
+  width:16px;height:16px;border:2px solid transparent;
+  border-top-color:currentColor;border-radius:50%;
+  animation:spin .6s linear infinite;display:inline-block;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Pulse */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.pulse{animation:pulse 1.5s ease infinite}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24"><path d="M2 4h2v16H2zm3 0h1v16H6zm2 0h2v16H8zm3 0h1v16h-1zm2 0h1v16h-1zm3 0h2v16h-2zm3 0h1v16h-1z"/></svg>
+    </div>
+    <div class="header-info">
+      <div class="app-name">Scan Surat Jalan</div>
+      <div class="conn-status" id="connStatus">
+        <span class="conn-dot off" id="connDot"></span>
+        <span id="connText">Offline</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" id="themeBtn" title="Ganti tema">
+        <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      </button>
+      <button class="icon-btn" id="settingsBtn" title="Pengaturan">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4M4.22 4.22l2.83 2.83m9.9 9.9l2.83 2.83M1 12h4m14 0h4M4.22 19.78l2.83-2.83m9.9-9.9l2.83-2.83"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Scanner -->
+    <div class="scanner-card">
+      <div class="scanner-area" id="scannerArea">
+        <video id="video" autoplay playsinline muted class="hidden"></video>
+        <div class="scanner-placeholder" id="placeholder">
+          <svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M20 4h-3.17L15 2H9L7.17 4H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V6a2 2 0 00-2-2z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          <p>Arahkan kamera ke barcode</p>
+          <p class="sub">Pilih "Live Scan" atau "Foto & Scan"</p>
+        </div>
+        <div class="scan-overlay hidden" id="scanOverlay">
+          <div class="scan-frame">
+            <div class="scan-corner tl"></div>
+            <div class="scan-corner tr"></div>
+            <div class="scan-corner bl"></div>
+            <div class="scan-corner br"></div>
+            <div class="scan-line"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Buttons -->
+    <div class="scan-btns">
+      <button class="btn btn-primary" id="photoBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M3 9h2m14 0h2"/></svg>
+        Foto & Scan
+      </button>
+      <button class="btn btn-secondary" id="liveBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Live
+      </button>
+    </div>
+    <input type="file" id="fileInput" accept="image/*" capture="environment">
+
+    <!-- History -->
+    <div>
+      <div class="history-header">
+        <div class="history-title">
+          Riwayat Scan
+          <span class="history-count" id="scanCount">0</span>
+        </div>
+        <div class="history-actions" id="historyActions">
+          <button class="btn-sm retry-all hidden" id="retryAllBtn" title="Retry semua pending">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg>
+            Retry
+          </button>
+          <button class="btn-sm" id="csvBtn" title="Export CSV">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4m4-5l5 5 5-5m-5 5V3"/></svg>
+            CSV
+          </button>
+          <button class="btn-sm danger" id="clearBtn" title="Hapus semua">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+            Hapus
+          </button>
+        </div>
+      </div>
+      <div class="scan-list" id="scanList">
+        <div class="empty-state" id="emptyState">
+          <svg viewBox="0 0 24 24"><path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          <p>Belum ada barcode yang di-scan</p>
+          <p style="font-size:11px;margin-top:2px">Hasil scan akan muncul di sini</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">⚙️ Pengaturan Sheet</div>
+    <div class="form-group">
+      <label class="form-label">URL Google Apps Script</label>
+      <input class="form-input" id="sheetUrlInput" placeholder="https://script.google.com/macros/s/.../exec" spellcheck="false">
+      <div class="form-hint" id="urlHint">Paste URL web app Google Apps Script kamu</div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" id="cancelSettingsBtn">Batal</button>
+      <button class="btn btn-primary" id="saveSettingsBtn">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ==================== APP STATE ====================
+const STORAGE_KEY = 'scan-sj-v2';
+const DUPLICATE_COOLDOWN = 3000;
+let state = { records: [], sheetUrl: '', theme: 'dark' };
+let isScanning = false;
+let scanStream = null;
+let scanTimer = null;
+let lastBarcode = '';
+let lastScanTime = 0;
+let detector = null;
+
+// ==================== INIT ====================
+function init() {
+  loadState();
+  applyTheme(state.theme);
+  updateUI();
+  setupEvents();
+  initDetector();
+  retryPending();
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      state.records = saved.records || [];
+      state.sheetUrl = saved.sheetUrl || '';
+      state.theme = saved.theme || 'dark';
+    }
+  } catch(e) {}
+}
+
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      records: state.records,
+      sheetUrl: state.sheetUrl,
+      theme: state.theme
+    }));
+  } catch(e) {}
+}
+
+// ==================== THEME ====================
+function applyTheme(theme) {
+  state.theme = theme;
+  document.documentElement.setAttribute('data-theme', theme);
+  const mc = document.getElementById('themeColor');
+  mc.content = theme === 'dark' ? '#0b1120' : '#f1f5f9';
+
+  const icon = document.getElementById('themeIcon');
+  if (theme === 'dark') {
+    icon.innerHTML = '<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>';
+  } else {
+    icon.innerHTML = '<circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>';
+  }
+  saveState();
+}
+
+function toggleTheme() {
+  applyTheme(state.theme === 'dark' ? 'light' : 'dark');
+}
+
+// ==================== BARCODE DETECTOR ====================
+async function initDetector() {
+  if ('BarcodeDetector' in window) {
+    try {
+      const formats = await BarcodeDetector.getSupportedFormats();
+      detector = new BarcodeDetector({ formats });
+    } catch(e) {
+      detector = new BarcodeDetector({
+        formats: ['code_128','code_39','ean_13','ean_8','qr_code','upc_a','upc_e','itf','codabar']
+      });
+    }
+  }
+}
+
+// ==================== CAMERA / SCANNING ====================
+async function startLiveScanning() {
+  if (isScanning) { stopScanning(); return; }
+
+  if (!detector) {
+    showToast('Browser tidak support BarcodeDetector. Gunakan Chrome terbaru.', 'error');
+    return;
+  }
+
+  try {
+    const video = document.getElementById('video');
+    const placeholder = document.getElementById('placeholder');
+    const overlay = document.getElementById('scanOverlay');
+    const btn = document.getElementById('liveBtn');
+
+    scanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+
+    video.srcObject = scanStream;
+    video.classList.remove('hidden');
+    placeholder.classList.add('hidden');
+    overlay.classList.remove('hidden');
+    btn.classList.add('active');
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> Stop';
+
+    isScanning = true;
+
+    await video.play();
+    continuousScan();
+  } catch(e) {
+    showToast('Tidak bisa akses kamera: ' + e.message, 'error');
+  }
+}
+
+function continuousScan() {
+  if (!isScanning) return;
+  const video = document.getElementById('video');
+
+  scanTimer = setTimeout(async () => {
+    if (!isScanning || video.readyState < 2) { continuousScan(); return; }
+    try {
+      const barcodes = await detector.detect(video);
+      if (barcodes.length > 0) {
+        const bc = barcodes[0].rawValue;
+        if (!isDuplicate(bc)) {
+          handleDetected(bc, 'LIVE_SCAN');
+        }
+      }
+    } catch(e) {}
+    continuousScan();
+  }, 300);
+}
+
+function stopScanning() {
+  isScanning = false;
+  if (scanTimer) { clearTimeout(scanTimer); scanTimer = null; }
+  if (scanStream) {
+    scanStream.getTracks().forEach(t => t.stop());
+    scanStream = null;
+  }
+  const video = document.getElementById('video');
+  const placeholder = document.getElementById('placeholder');
+  const overlay = document.getElementById('scanOverlay');
+  const btn = document.getElementById('liveBtn');
+
+  video.srcObject = null;
+  video.classList.add('hidden');
+  placeholder.classList.remove('hidden');
+  overlay.classList.add('hidden');
+  btn.classList.remove('active');
+  btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg> Live';
+}
+
+async function scanFromPhoto(file) {
+  if (!file) return;
+  if (!detector) {
+    showToast('Browser tidak support BarcodeDetector', 'error');
+    return;
+  }
+
+  const img = new Image();
+  img.src = URL.createObjectURL(file);
+
+  img.onload = async () => {
+    try {
+      const barcodes = await detector.detect(img);
+      if (barcodes.length > 0) {
+        let count = 0;
+        for (const bc of barcodes) {
+          if (!isDuplicate(bc.rawValue)) {
+            handleDetected(bc.rawValue, 'PHOTO_SCAN');
+            count++;
+          }
+        }
+        if (count === 0) showToast('Barcode sudah di-scan sebelumnya', 'info');
+      } else {
+        showToast('Tidak ada barcode terdeteksi', 'error');
+      }
+    } catch(e) {
+      showToast('Gagal scan foto: ' + e.message, 'error');
+    }
+    URL.revokeObjectURL(img.src);
+  };
+
+  img.onerror = () => {
+    showToast('Gagal membaca foto', 'error');
+    URL.revokeObjectURL(img.src);
+  };
+}
+
+function isDuplicate(barcode) {
+  const now = Date.now();
+  if (barcode === lastBarcode && (now - lastScanTime) < DUPLICATE_COOLDOWN) return true;
+  lastBarcode = barcode;
+  lastScanTime = now;
+  return false;
+}
+
+// ==================== HANDLE DETECTION ====================
+async function handleDetected(barcode, format) {
+  playBeep();
+  if (navigator.vibrate) navigator.vibrate(100);
+
+  const record = {
+    id: 'scan-' + Date.now() + '-' + Math.random().toString(36).substr(2,5),
+    barcode: barcode,
+    format: format,
+    timestamp: Date.now(),
+    synced: false
+  };
+
+  state.records.unshift(record);
+  saveState();
+  updateUI();
+  showToast('Barcode terscan: ' + barcode, 'success');
+
+  // Sync to sheet
+  if (state.sheetUrl) {
+    const ok = await syncToSheet(state.sheetUrl, record);
+    if (ok) {
+      // FIX: mark THIS specific record by ID, not records[0]
+      const r = state.records.find(r => r.id === record.id);
+      if (r) { r.synced = true; saveState(); updateUI(); }
+    }
+  }
+}
+
+// ==================== SYNC ====================
+async function syncToSheet(url, record) {
+  if (!url) return false;
+  try {
+    const data = {
+      timestamp: formatTimestamp(record.timestamp),
+      barcode: record.barcode,
+      format: record.format
+    };
+    await fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(data)
+    });
+    return true;
+  } catch(e) {
+    console.error('Sync failed:', e);
+    return false;
+  }
+}
+
+async function retrySync(recordId) {
+  const record = state.records.find(r => r.id === recordId);
+  if (!record || record.synced || !state.sheetUrl) return;
+
+  const ok = await syncToSheet(state.sheetUrl, record);
+  if (ok) {
+    record.synced = true;
+    saveState();
+    updateUI();
+    showToast('Berhasil sync: ' + record.barcode, 'success');
+  } else {
+    showToast('Gagal sync, coba lagi nanti', 'error');
+  }
+}
+
+async function retryPending() {
+  if (!state.sheetUrl) return;
+  const pending = state.records.filter(r => !r.synced);
+  if (pending.length === 0) return;
+
+  let synced = 0;
+  for (const record of pending) {
+    const ok = await syncToSheet(state.sheetUrl, record);
+    if (ok) { record.synced = true; synced++; }
+    await new Promise(r => setTimeout(r, 300)); // rate limit
+  }
+  if (synced > 0) {
+    saveState();
+    updateUI();
+    showToast(`${synced} barcode berhasil di-sync`, 'success');
+  }
+}
+
+// ==================== FORMAT ====================
+function formatTimestamp(ts) {
+  const d = new Date(ts);
+  const day = String(d.getDate()).padStart(2,'0');
+  const month = String(d.getMonth()+1).padStart(2,'0');
+  const year = d.getFullYear();
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2,'0');
+  const s = String(d.getSeconds()).padStart(2,'0');
+  return `${day}/${month}/${year} ${h}:${m}:${s}`;
+}
+
+function formatTime(ts) {
+  const d = new Date(ts);
+  return String(d.getHours()).padStart(2,'0') + ':' +
+         String(d.getMinutes()).padStart(2,'0') + ':' +
+         String(d.getSeconds()).padStart(2,'0');
+}
+
+function formatDate(ts) {
+  const d = new Date(ts);
+  return String(d.getDate()).padStart(2,'0') + '/' +
+         String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
+}
+
+// ==================== AUDIO ====================
+function playBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = 1200;
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.12);
+  } catch(e) {}
+}
+
+// ==================== UI ====================
+function updateUI() {
+  // Connection status
+  const dot = document.getElementById('connDot');
+  const text = document.getElementById('connText');
+  if (state.sheetUrl) {
+    dot.className = 'conn-dot on';
+    text.textContent = 'Terhubung';
+    text.style.color = 'var(--success)';
+  } else {
+    dot.className = 'conn-dot off';
+    text.textContent = 'Offline';
+    text.style.color = '';
+  }
+
+  // Count
+  document.getElementById('scanCount').textContent = state.records.length;
+
+  // Empty state
+  const empty = document.getElementById('emptyState');
+  if (state.records.length === 0) {
+    empty.classList.remove('hidden');
+  } else {
+    empty.classList.add('hidden');
+  }
+
+  // Retry all button
+  const pendingCount = state.records.filter(r => !r.synced).length;
+  const retryAll = document.getElementById('retryAllBtn');
+  if (pendingCount > 0 && state.sheetUrl) {
+    retryAll.classList.remove('hidden');
+  } else {
+    retryAll.classList.add('hidden');
+  }
+
+  // Render list
+  renderList();
+}
+
+function renderList() {
+  const list = document.getElementById('scanList');
+  const items = state.records.map(r => {
+    const synced = r.synced;
+    return `<div class="scan-item" data-id="${r.id}">
+      <div class="scan-icon-wrap ${synced ? 'synced' : 'pending'}">
+        ${synced
+          ? '<svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>'
+          : '<svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" class="pulse"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>'
+        }
+      </div>
+      <div class="scan-details">
+        <div class="scan-barcode">${escHtml(r.barcode)}</div>
+        <div class="scan-meta">
+          <span class="scan-mode">${r.format}</span>
+          <span>${formatDate(r.timestamp)} ${formatTime(r.timestamp)}</span>
+          <span class="scan-status ${synced?'synced':'pending'}">
+            ${synced ? '✓ Synced' : '⏳ Pending'}
+          </span>
+        </div>
+      </div>
+      <div class="scan-item-actions">
+        ${!synced && state.sheetUrl ? `<button class="item-btn retry" onclick="retrySync('${r.id}')" title="Retry">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg>
+        </button>` : ''}
+        <button class="item-btn delete" onclick="deleteRecord('${r.id}')" title="Hapus">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>`;
+  });
+
+  // Keep empty state element
+  const emptyEl = document.getElementById('emptyState');
+  list.innerHTML = '';
+  list.appendChild(emptyEl);
+  list.insertAdjacentHTML('beforeend', items.join(''));
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ==================== ACTIONS ====================
+function deleteRecord(id) {
+  state.records = state.records.filter(r => r.id !== id);
+  saveState();
+  updateUI();
+}
+
+function clearAll() {
+  if (state.records.length === 0) return;
+  if (confirm('Hapus semua riwayat scan?')) {
+    state.records = [];
+    saveState();
+    updateUI();
+    showToast('Riwayat dihapus', 'info');
+  }
+}
+
+function exportCSV() {
+  if (state.records.length === 0) { showToast('Tidak ada data', 'info'); return; }
+
+  let csv = 'TIMESTAMP,BARCODE,FORMAT,STATUS\n';
+  for (const r of state.records) {
+    csv += `"${formatTimestamp(r.timestamp)}","${r.barcode}","${r.format}","${r.synced?'Synced':'Pending'}"\n`;
+  }
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `scan-sj-${formatDate(Date.now()).replace(/\//g,'-')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSV berhasil di-download', 'success');
+}
+
+// ==================== SETTINGS ====================
+function openSettings() {
+  document.getElementById('sheetUrlInput').value = state.sheetUrl;
+  updateUrlHint(state.sheetUrl);
+  document.getElementById('settingsModal').classList.add('show');
+}
+
+function closeSettings() {
+  document.getElementById('settingsModal').classList.remove('show');
+}
+
+function saveSettings() {
+  const url = document.getElementById('sheetUrlInput').value.trim();
+  if (url && !url.includes('script.google.com/macros')) {
+    showToast('URL harus berupa Apps Script web app', 'error');
+    return;
+  }
+  state.sheetUrl = url;
+  saveState();
+  updateUI();
+  closeSettings();
+  showToast(url ? 'Sheet terhubung!' : 'Sheet terputus', url ? 'success' : 'info');
+
+  if (url) retryPending();
+}
+
+function updateUrlHint(url) {
+  const hint = document.getElementById('urlHint');
+  if (!url) {
+    hint.textContent = 'Paste URL web app Google Apps Script kamu';
+    hint.className = 'form-hint';
+  } else if (url.includes('script.google.com/macros')) {
+    hint.textContent = '✓ URL valid';
+    hint.className = 'form-hint valid';
+  } else {
+    hint.textContent = '✗ Bukan URL Apps Script yang valid';
+    hint.className = 'form-hint invalid';
+  }
+}
+
+// ==================== TOAST ====================
+function showToast(msg, type = 'info') {
+  const container = document.getElementById('toastContainer');
+  const icons = {
+    success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>',
+    error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6m0-6l6 6"/></svg>',
+    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>'
+  };
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.innerHTML = (icons[type] || '') + `<span>${escHtml(msg)}</span>`;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.animation = 'toastOut .3s ease forwards';
+    setTimeout(() => toast.remove(), 300);
+  }, 2500);
+}
+
+// ==================== EVENTS ====================
+function setupEvents() {
+  document.getElementById('themeBtn').onclick = toggleTheme;
+  document.getElementById('settingsBtn').onclick = openSettings;
+  document.getElementById('cancelSettingsBtn').onclick = closeSettings;
+  document.getElementById('saveSettingsBtn').onclick = saveSettings;
+  document.getElementById('clearBtn').onclick = clearAll;
+  document.getElementById('csvBtn').onclick = exportCSV;
+  document.getElementById('retryAllBtn').onclick = retryPending;
+
+  document.getElementById('liveBtn').onclick = startLiveScanning;
+
+  document.getElementById('photoBtn').onclick = () => {
+    document.getElementById('fileInput').click();
+  };
+
+  document.getElementById('fileInput').onchange = (e) => {
+    const file = e.target.files[0];
+    if (file) scanFromPhoto(file);
+    e.target.value = '';
+  };
+
+  document.getElementById('sheetUrlInput').oninput = (e) => {
+    updateUrlHint(e.target.value.trim());
+  };
+
+  // Close modal on overlay click
+  document.getElementById('settingsModal').onclick = (e) => {
+    if (e.target.id === 'settingsModal') closeSettings();
+  };
+
+  // Handle back button
+  window.addEventListener('popstate', () => {
+    if (document.getElementById('settingsModal').classList.contains('show')) {
+      closeSettings();
+    }
+  });
+}
+
+// ==================== MIGRATION ====================
+// Migrate from old app's localStorage if exists
+function migrateOldData() {
+  try {
+    const old = localStorage.getItem('barcode-scanner-state');
+    if (old && !localStorage.getItem(STORAGE_KEY)) {
+      const data = JSON.parse(old);
+      if (data.records && data.records.length > 0) {
+        state.records = data.records.map(r => ({
+          id: r.id || 'migrated-' + Math.random().toString(36).substr(2,5),
+          barcode: r.barcode,
+          format: r.format || 'UNKNOWN',
+          timestamp: r.timestamp || Date.now(),
+          synced: r.synced || false
+        }));
+        state.sheetUrl = data.sheetUrl || '';
+        saveState();
+      }
+    }
+  } catch(e) {}
+}
+
+// ==================== START ====================
+migrateOldData();
+init();
+</script>
+</body>
+</html>
