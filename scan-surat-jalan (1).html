@@ -2,10 +2,12 @@
 <html lang="id" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" id="themeColor" content="#0f172a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Scan SJ">
+<meta name="mobile-web-app-capable" content="yes">
 <title>Scan Surat Jalan</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -36,6 +38,7 @@ body{
 /* HEADER */
 header{
   padding:12px 16px;display:flex;align-items:center;gap:10px;
+  padding-top:calc(12px + env(safe-area-inset-top));
   background:var(--bg2);border-bottom:1px solid var(--border);
   position:relative;z-index:10;transition:background .35s,border-color .35s;
 }
@@ -62,7 +65,7 @@ header{
 .icon-btn svg{width:18px;height:18px}
 
 /* MAIN */
-main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 80px}
+main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px calc(80px + env(safe-area-inset-bottom))}
 
 /* SCANNER */
 .scanner-card{
@@ -203,7 +206,7 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 8
 .modal-overlay.show{opacity:1;visibility:visible}
 .modal{
   background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-width:480px;
-  padding:20px;transform:translateY(100%);transition:transform .35s cubic-bezier(.32,.72,0,1);
+  padding:20px 20px calc(20px + env(safe-area-inset-bottom));transform:translateY(100%);transition:transform .35s cubic-bezier(.32,.72,0,1);
 }
 .modal-overlay.show .modal{transform:translateY(0)}
 .modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px}
@@ -212,7 +215,7 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 8
 .form-label{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;display:block}
 .form-input{
   width:100%;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);
-  background:var(--bg3);color:var(--text);font-size:14px;outline:none;
+  background:var(--bg3);color:var(--text);font-size:16px;outline:none;
   transition:border-color .2s;
 }
 .form-input:focus{border-color:var(--accent)}
@@ -223,7 +226,7 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 8
 
 /* TOAST */
 .toast-container{
-  position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:200;
+  position:fixed;top:calc(16px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:200;
   width:calc(100% - 32px);max-width:400px;pointer-events:none;
 }
 .toast{
@@ -392,6 +395,11 @@ let scanTimer = null;
 let lastBarcode = '';
 let lastScanTime = 0;
 let detector = null;
+let detectorReady = null;
+let detectorEngine = '';
+let audioCtx = null;
+const POLYFILL_URL = 'https://cdn.jsdelivr.net/npm/barcode-detector@3.2.3/dist/es/ponyfill.min.js';
+const WANTED_FORMATS = ['code_128','code_39','code_93','ean_13','ean_8','qr_code','upc_a','upc_e','itf','codabar','data_matrix','pdf417'];
 
 // ==================== INIT ====================
 function init() {
@@ -399,7 +407,7 @@ function init() {
   applyTheme(state.theme);
   updateUI();
   setupEvents();
-  initDetector();
+  initDetector().catch(() => {});
   retryPending();
 }
 
@@ -446,27 +454,67 @@ function toggleTheme() {
 }
 
 // ==================== BARCODE DETECTOR ====================
-async function initDetector() {
-  if ('BarcodeDetector' in window) {
-    try {
-      const formats = await BarcodeDetector.getSupportedFormats();
-      detector = new BarcodeDetector({ formats });
-    } catch(e) {
-      detector = new BarcodeDetector({
-        formats: ['code_128','code_39','ean_13','ean_8','qr_code','upc_a','upc_e','itf','codabar']
-      });
-    }
+// Native BarcodeDetector (Chrome Android) dipakai kalau ada.
+// Safari / semua browser iPhone tidak punya -> pakai polyfill ZXing WASM.
+function initDetector() {
+  if (!detectorReady) {
+    detectorReady = (async () => {
+      // 1) Native
+      if ('BarcodeDetector' in window) {
+        try {
+          const sup = await window.BarcodeDetector.getSupportedFormats();
+          const formats = WANTED_FORMATS.filter(f => sup.includes(f));
+          if (formats.length) {
+            detector = new window.BarcodeDetector({ formats });
+            detectorEngine = 'native';
+            return detector;
+          }
+        } catch(e) {}
+      }
+      // 2) Polyfill (iPhone / iPad / desktop non-Chrome)
+      const mod = await import(POLYFILL_URL);
+      try { mod.prepareZXingModule && mod.prepareZXingModule({ fireImmediately: true }); } catch(e) {}
+      detector = new mod.BarcodeDetector({ formats: WANTED_FORMATS });
+      detectorEngine = 'zxing';
+      return detector;
+    })().catch(e => {
+      detectorReady = null; // boleh coba lagi nanti (mis. tadinya offline)
+      throw e;
+    });
   }
+  return detectorReady;
+}
+
+async function getDetector() {
+  if (detector) return detector;
+  try {
+    return await initDetector();
+  } catch(e) {
+    showToast('Gagal memuat scanner. Cek koneksi internet lalu coba lagi.', 'error');
+    return null;
+  }
+}
+
+function canUseCamera() {
+  return !!(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 }
 
 // ==================== CAMERA / SCANNING ====================
 async function startLiveScanning() {
   if (isScanning) { stopScanning(); return; }
 
-  if (!detector) {
-    showToast('Browser tidak support BarcodeDetector. Gunakan Chrome terbaru.', 'error');
+  if (!canUseCamera()) {
+    showToast('Live Scan butuh link https://. Pakai "Foto & Scan" atau buka lewat link https.', 'error');
     return;
   }
+
+  const liveBtn = document.getElementById('liveBtn');
+  if (liveBtn.disabled) return;
+  liveBtn.disabled = true;
+  if (!detector) showToast('Memuat scanner...', 'info');
+  const det = await getDetector();
+  liveBtn.disabled = false;
+  if (!det) return;
 
   try {
     const video = document.getElementById('video');
@@ -475,9 +523,14 @@ async function startLiveScanning() {
     const btn = document.getElementById('liveBtn');
 
     scanStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
     });
 
+    // iOS: wajib inline + muted supaya video tidak fullscreen / diblok autoplay
+    video.setAttribute('playsinline', '');
+    video.setAttribute('webkit-playsinline', '');
+    video.muted = true;
     video.srcObject = scanStream;
     video.classList.remove('hidden');
     placeholder.classList.add('hidden');
@@ -490,7 +543,11 @@ async function startLiveScanning() {
     await video.play();
     continuousScan();
   } catch(e) {
-    showToast('Tidak bisa akses kamera: ' + e.message, 'error');
+    stopScanning();
+    const msg = (e && e.name === 'NotAllowedError')
+      ? 'Izin kamera ditolak. iPhone: Settings > Safari > Camera > Allow, lalu reload.'
+      : 'Tidak bisa akses kamera: ' + (e && e.message ? e.message : e);
+    showToast(msg, 'error');
   }
 }
 
@@ -533,19 +590,38 @@ function stopScanning() {
   btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg> Live';
 }
 
+// Foto iPhone 12MP+ terlalu berat -> kecilkan dulu ke canvas.
+function imageToCanvas(img, maxSide) {
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const scale = Math.min(1, maxSide / Math.max(w, h));
+  const c = document.createElement('canvas');
+  c.width = Math.round(w * scale);
+  c.height = Math.round(h * scale);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c;
+}
+
+async function detectInImage(det, img) {
+  let res = [];
+  for (const side of [1600, 2600]) {
+    try { res = await det.detect(imageToCanvas(img, side)); } catch(e) { res = []; }
+    if (res.length) return res;
+  }
+  return det.detect(img);
+}
+
 async function scanFromPhoto(file) {
   if (!file) return;
-  if (!detector) {
-    showToast('Browser tidak support BarcodeDetector', 'error');
-    return;
-  }
+  if (!detector) showToast('Memuat scanner...', 'info');
+  const det = await getDetector();
+  if (!det) return;
 
   const img = new Image();
   img.src = URL.createObjectURL(file);
 
   img.onload = async () => {
     try {
-      const barcodes = await detector.detect(img);
+      const barcodes = await detectInImage(det, img);
       if (barcodes.length > 0) {
         let count = 0;
         for (const bc of barcodes) {
@@ -688,9 +764,32 @@ function formatDate(ts) {
 }
 
 // ==================== AUDIO ====================
+function getAudioCtx() {
+  if (!audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    audioCtx = new AC();
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function unlockAudio() {
+  try {
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    const b = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = b; src.connect(ctx.destination); src.start(0);
+  } catch(e) {}
+  document.removeEventListener('touchend', unlockAudio);
+  document.removeEventListener('click', unlockAudio);
+}
+
 function playBeep() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = getAudioCtx();
+    if (!ctx) return;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -811,13 +910,26 @@ function exportCSV() {
     csv += `"${formatTimestamp(r.timestamp)}","${r.barcode}","${r.format}","${r.synced?'Synced':'Pending'}"\n`;
   }
 
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const fname = `scan-sj-${formatDate(Date.now()).replace(/\//g,'-')}.csv`;
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+
+  // iPhone: buka share sheet (Save to Files / WhatsApp / Email)
+  try {
+    const f = new File([blob], fname, { type: 'text/csv' });
+    if (navigator.canShare && navigator.canShare({ files: [f] })) {
+      navigator.share({ files: [f], title: fname }).catch(() => {});
+      return;
+    }
+  } catch(e) {}
+
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `scan-sj-${formatDate(Date.now()).replace(/\//g,'-')}.csv`;
+  a.download = fname;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000); // Safari butuh jeda sebelum revoke
   showToast('CSV berhasil di-download', 'success');
 }
 
@@ -911,6 +1023,15 @@ function setupEvents() {
   document.getElementById('settingsModal').onclick = (e) => {
     if (e.target.id === 'settingsModal') closeSettings();
   };
+
+  // iOS: audio hanya boleh mulai setelah sentuhan user
+  document.addEventListener('touchend', unlockAudio, { passive: true });
+  document.addEventListener('click', unlockAudio);
+
+  // iOS mematikan kamera saat app di-background -> reset state
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && isScanning) stopScanning();
+  });
 
   // Handle back button
   window.addEventListener('popstate', () => {
